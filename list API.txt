@@ -1,0 +1,29 @@
+- list all drivers : GET http://localhost:5000/api/users?role=driver 
+- list all guide : GET http://localhost:5000/api/users?role=guide
+- Use these IDs to filter jobs like:GET /api/jobs/list?driverId=680a0c04ac108a79f9b1513a
+- List all Jobs : GET /api/jobs/list (without filter)
+- Create job : POST /api/jobs/create. payload :
+{
+  "jobDate": "2025-04-25",
+  "adminId": "680b4581df0ed4a8cb60e781",
+  "driverId": "680a0c04ac108a79f9b1513a",
+  "guideId": "680a41b5510e61d159b51647",
+  "destination": "Pantai kuta"
+}
+
+- Filter by driver & status: GET /api/jobs/list?driverId=abc123&status=on%20schedule
+- Filter by guide & date: GET /api/jobs/list?guideId=yyy&jobDate=2025-04-25
+
+- Tracking start : POST : /api/tracking/start
+and payload :
+{
+"jobId": "680b594312ebabc7fe36bc15",
+  "lat": -8.65,
+  "lng": 115.22
+}
+- GET /api/tracking/history?userId=abc123 (adminId)
+- GET /api/tracking/history?jobId=xyz789 (job id from job list)
+- /api/tracking/history?userId=abc123&status=completed (filtter byb stattus also)
+- /api/tracking/history?userId=abc123&fromDate=2025-04-01&toDate=2025-04-25 (filter by date)
+
+
