@@ -4,24 +4,25 @@ import API from "../api/api";
 import socket from "../utils/socket";
 import { FaPlay, FaStop } from "react-icons/fa";
 
-const DEMO_MODE = true;
+const DEMO_MODE = true; // ⚡ Set false kalau mau GPS asli
 
-const demoPath = [
-  { lat: -7.7701, lng: 110.3775 },
-  { lat: -7.7710, lng: 110.3790 },
-  { lat: -7.7720, lng: 110.3805 },
-  { lat: -7.7725, lng: 110.3822 },
-  { lat: -7.7735, lng: 110.3840 },
+// Dummy path simulasi perjalanan GUIDE → Rute B
+const demoPathGuide = [
+  { lat: -7.7605, lng: 110.3765 },
+  { lat: -7.7615, lng: 110.3780 },
+  { lat: -7.7625, lng: 110.3798 },
+  { lat: -7.7635, lng: 110.3815 },
+  { lat: -7.7645, lng: 110.3832 },
 ];
 
 export default function GuideDashboard() {
   const [jobs, setJobs] = useState([]);
   const [trackingJobId, setTrackingJobId] = useState(null);
   const [intervalId, setIntervalId] = useState(null);
-  const [currentStep, setCurrentStep] = useState(0);
 
   const userId = localStorage.getItem("userId");
 
+  // Ambil semua job untuk guide
   const fetchJobs = async () => {
     try {
       const res = await API.get(`/jobs/list?guideId=${userId}&status=on schedule`);
@@ -38,21 +39,29 @@ export default function GuideDashboard() {
     fetchJobs();
   }, []);
 
+  // Mulai tracking lokasi
   const handleStartTracking = async (jobId) => {
     try {
       await API.post("/tracking/start", { jobId });
 
       if (DEMO_MODE) {
+        let step = 0;
         const id = setInterval(() => {
-          const point = demoPath[currentStep % demoPath.length];
+          const point = demoPathGuide[step % demoPathGuide.length];
+          const ts = Date.now();
+
+          // Emit lokasi real-time ke socket.io
           socket.emit("locationUpdate", {
             userId,
             jobId,
             latitude: point.lat,
             longitude: point.lng,
+            timestamp: ts,
           });
-          setCurrentStep((prev) => prev + 1);
+
+          step = (step + 1) % demoPathGuide.length;
         }, 2000);
+
         setIntervalId(id);
       } else {
         if ("geolocation" in navigator) {
@@ -63,12 +72,15 @@ export default function GuideDashboard() {
                 jobId,
                 latitude: pos.coords.latitude,
                 longitude: pos.coords.longitude,
+                timestamp: pos.timestamp || Date.now(),
               });
             },
             (err) => console.error("Geolocation error:", err),
             { enableHighAccuracy: true }
           );
           setIntervalId(watchId);
+        } else {
+          alert("Geolocation not supported.");
         }
       }
 
@@ -79,6 +91,7 @@ export default function GuideDashboard() {
     }
   };
 
+  // Berhenti tracking lokasi
   const handleStopTracking = async (jobId) => {
     if (DEMO_MODE) clearInterval(intervalId);
     else navigator.geolocation.clearWatch(intervalId);
@@ -96,6 +109,14 @@ export default function GuideDashboard() {
     setIntervalId(null);
   };
 
+  // Bersihkan interval/watch kalau component unmount
+  useEffect(() => {
+    return () => {
+      if (DEMO_MODE && intervalId) clearInterval(intervalId);
+      else if (intervalId) navigator.geolocation.clearWatch(intervalId);
+    };
+  }, [intervalId]);
+
   return (
     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
       {jobs.map((job) => (
@@ -103,7 +124,7 @@ export default function GuideDashboard() {
           key={job._id}
           className="rounded-2xl p-4 shadow-md text-white"
           style={{
-            background: "linear-gradient(135deg, #11998e, #38ef7d)",
+            background: "linear-gradient(135deg, #38b2ac, #3182ce)",
           }}
         >
           <h3 className="text-xl font-semibold mb-1">{job.destination}</h3>

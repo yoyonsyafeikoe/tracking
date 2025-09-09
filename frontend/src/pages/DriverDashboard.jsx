@@ -19,13 +19,14 @@ export default function DriverDashboard() {
   const [jobs, setJobs] = useState([]);
   const [trackingJobId, setTrackingJobId] = useState(null);
   const [intervalId, setIntervalId] = useState(null);
-  const [currentStep, setCurrentStep] = useState(0);
 
   const userId = localStorage.getItem("userId");
 
   const fetchJobs = async () => {
     try {
-      const res = await API.get(`/jobs/list?driverId=${userId}&status=on schedule`);
+      const res = await API.get(
+        `/jobs/list?driverId=${userId}&status=on schedule`
+      );
       const sorted = [...res.data].sort(
         (a, b) => new Date(b.jobDate) - new Date(a.jobDate)
       );
@@ -44,9 +45,10 @@ export default function DriverDashboard() {
       await API.post("/tracking/start", { jobId });
 
       if (DEMO_MODE) {
-        let step = 0; // ✅ Gunakan variabel lokal, bukan state React
-        const id = setInterval(async () => {
+        let step = 0;
+        const id = setInterval(() => {
           const point = demoPath[step % demoPath.length];
+          const ts = Date.now();
 
           // Emit real-time lokasi ke socket
           socket.emit("locationUpdate", {
@@ -54,25 +56,13 @@ export default function DriverDashboard() {
             jobId,
             latitude: point.lat,
             longitude: point.lng,
+            timestamp: ts,
           });
 
-          // Simpan titik ke DB agar total distance dan route bisa dihitung
-          try {
-            await API.post("/tracking/update", {
-              jobId,
-              latitude: point.lat,
-              longitude: point.lng,
-            });
-          } catch (e) {
-            console.error("Gagal simpan titik:", e);
-          }
-
-          // Geser ke titik berikutnya setiap 2 detik
           step = (step + 1) % demoPath.length;
         }, 2000);
 
         setIntervalId(id);
-      
       } else {
         if ("geolocation" in navigator) {
           const watchId = navigator.geolocation.watchPosition(
@@ -82,6 +72,7 @@ export default function DriverDashboard() {
                 jobId,
                 latitude: pos.coords.latitude,
                 longitude: pos.coords.longitude,
+                timestamp: pos.timestamp || Date.now(),
               });
             },
             (err) => console.error("Geolocation error:", err),
@@ -116,6 +107,14 @@ export default function DriverDashboard() {
     setTrackingJobId(null);
     setIntervalId(null);
   };
+
+  // Bersihkan interval kalau komponen unmount (hindari zombie interval)
+  useEffect(() => {
+    return () => {
+      if (DEMO_MODE && intervalId) clearInterval(intervalId);
+      else if (intervalId) navigator.geolocation.clearWatch(intervalId);
+    };
+  }, [intervalId]);
 
   return (
     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">

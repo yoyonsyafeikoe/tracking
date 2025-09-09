@@ -13,6 +13,12 @@ export default function ManageUsers() {
     fetchUsers();
   }, [role, refresh]);
 
+  // ✅ Sinkronkan formData.role dengan tab aktif
+  useEffect(() => {
+    setFormData({ username: '', password: '', role });
+    setEditingId(null);
+  }, [role]);
+
   const fetchUsers = async () => {
     try {
       const res = await API.get(`/users?role=${role}&search=${search}`);
@@ -22,9 +28,7 @@ export default function ManageUsers() {
     }
   };
 
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
-  };
+  const handleSearchChange = (e) => setSearch(e.target.value);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -55,7 +59,7 @@ export default function ManageUsers() {
       if (editingId) {
         await API.put(`/users/${editingId}`, formData);
       } else {
-        await API.post('/users/register', formData)
+        await API.post('/users/register', formData);
       }
       setFormData({ username: '', password: '', role });
       setEditingId(null);
@@ -71,8 +75,18 @@ export default function ManageUsers() {
 
       {/* Role switch */}
       <div className="flex gap-4 mb-4">
-        <button onClick={() => setRole('driver')} className={`px-4 py-2 rounded ${role === 'driver' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>Drivers</button>
-        <button onClick={() => setRole('guide')} className={`px-4 py-2 rounded ${role === 'guide' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>Guides</button>
+        <button
+          onClick={() => setRole('driver')}
+          className={`px-4 py-2 rounded ${role === 'driver' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+        >
+          Drivers
+        </button>
+        <button
+          onClick={() => setRole('guide')}
+          className={`px-4 py-2 rounded ${role === 'guide' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+        >
+          Guides
+        </button>
       </div>
 
       {/* Search */}

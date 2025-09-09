@@ -8,6 +8,7 @@ import MonitoringPage from '../pages/MonitoringPage';
 import Analytics from '../pages/Analytics';
 import TrackingHistory from "../pages/TrackingHistory";
 import TrackingHistoryDetail from "../pages/TrackingHistoryDetail";
+import TourPackageIndex from "../pages/components/TourPackageIndex";
 import ViewRoute from "../pages/ViewRoute";
 
 
@@ -25,6 +26,7 @@ export default function AppRoutes() {
       <Route path="/tracking-history" element={<TrackingHistory />} />
       <Route path="/tracking/:sessionId" element={<TrackingHistoryDetail />} />
       <Route path="/tracking/:id" element={<ViewRoute />} />
+      <Route path="/tour-packages" element={<TourPackageIndex />} />
     </Routes>
   );
 }

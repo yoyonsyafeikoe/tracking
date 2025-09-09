@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
-import { Chart, LineElement, PointElement, LineController, CategoryScale, LinearScale, PieController, ArcElement } from 'chart.js';
+import { Chart, LineElement, PointElement, LineController, CategoryScale, LinearScale, PieController, ArcElement, Filler } from 'chart.js';
 
-Chart.register(LineElement, PointElement, LineController, CategoryScale, LinearScale, PieController, ArcElement);
+Chart.register(LineElement, PointElement, LineController, CategoryScale, LinearScale, PieController, ArcElement, Filler);
 
 const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000');
 
@@ -18,7 +18,6 @@ export default function AdminAnalytics() {
   useEffect(() => {
     socket.on('analytics:update', (data) => {
       setSummary(data.summary);
-      console.log(data);
       //setToursInProgress(data.progressTable );
       setToursInProgress(data.progressTable);
       setRevenueTable(data.revenueTable);
@@ -31,42 +30,66 @@ export default function AdminAnalytics() {
   }, []);
 
   const updateCharts = (lineData, pieData) => {
-    const lineCtx = lineChartRef.current?.getContext('2d');
-    const pieCtx = pieChartRef.current?.getContext('2d');
+  const lineCtx = lineChartRef.current?.getContext('2d');
+  const pieCtx = pieChartRef.current?.getContext('2d');
 
-    if (lineChartInstance.current) lineChartInstance.current.destroy();
-    if (pieChartInstance.current) pieChartInstance.current.destroy();
+  // === LINE CHART ===
+  if (lineChartInstance.current) {
+    lineChartInstance.current.data.labels = Object.keys(lineData).sort();
+    lineChartInstance.current.data.datasets[0].data = Object.values(lineData);
+    lineChartInstance.current.update();
+  } else if (lineCtx) {
+    lineChartInstance.current = new Chart(lineCtx, {
+      type: 'line',
+      data: {
+        labels: Object.keys(lineData).sort(),
+        datasets: [{
+          label: 'Bookings',
+          data: Object.values(lineData),
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'rgba(75,192,192,0.2)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: {
+          duration: 800,      // durasi animasi (ms)
+          easing: 'easeOutQuart' // gaya animasi
+        }
+      }
+    });
+  }
 
-    if (lineCtx) {
-      lineChartInstance.current = new Chart(lineCtx, {
-        type: 'line',
-        data: {
-          labels: Object.keys(lineData).sort(),
-          datasets: [{
-            label: 'Bookings',
-            data: Object.values(lineData),
-            borderColor: 'rgb(75, 192, 192)',
-            tension: 0.1
-          }]
-        },
-        options: { responsive: true }
-      });
-    }
+  // === PIE CHART ===
+  if (pieChartInstance.current) {
+    pieChartInstance.current.data.labels = Object.keys(pieData);
+    pieChartInstance.current.data.datasets[0].data = Object.values(pieData);
+    pieChartInstance.current.update();
+  } else if (pieCtx) {
+    pieChartInstance.current = new Chart(pieCtx, {
+      type: 'pie',
+      data: {
+        labels: Object.keys(pieData),
+        datasets: [{
+          data: Object.values(pieData),
+          backgroundColor: Object.keys(pieData).map(
+            () => `hsl(${Math.random() * 360}, 70%, 60%)`
+          )
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: {
+          duration: 800,
+          easing: 'easeOutBounce' // biar lebih “fun”
+        }
+      }
+    });
+  }
+};
 
-    if (pieCtx) {
-      pieChartInstance.current = new Chart(pieCtx, {
-        type: 'pie',
-        data: {
-          labels: Object.keys(pieData),
-          datasets: [{
-            data: Object.values(pieData),
-            backgroundColor: Object.keys(pieData).map(() => `hsl(${Math.random() * 360}, 70%, 60%)`)
-          }]
-        },
-        options: { responsive: true }
-      });
-    }
-  };
 
   return (
     <div className="p-6 space-y-6">

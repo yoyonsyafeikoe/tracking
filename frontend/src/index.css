@@ -4,4 +4,35 @@
 body {
     font-family: 'Poppins', sans-serif;
   }
+
+  /* custom button */
+.btn-main {
+  @apply px-4 py-2 rounded text-white font-medium;
+  background-color: #6ED0E6;
+}
+
+.btn-main:hover {
+  background-color: #5AB6CC;
+}
+
+.btn-danger {
+  @apply px-4 py-2 rounded text-white font-medium;
+  background-color: #DC2626; /* merah Tailwind */
+}
+
+.btn-danger:hover {
+  background-color: #B91C1C;
+}
+
+.btn-outline {
+  @apply px-3 py-1 rounded border font-medium flex items-center gap-1;
+  border-color: #6ED0E6;
+  color: #6ED0E6;
+}
+
+.btn-outline:hover {
+  border-color: #5AB6CC;
+  color: #5AB6CC;
+}
+
   

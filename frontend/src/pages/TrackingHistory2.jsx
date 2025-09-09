@@ -8,24 +8,10 @@ export default function TrackingHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // filter states
-  const [role, setRole] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      setError(null);
-
-      const params = {};
-      if (role !== "all") params.role = role;
-      if (status !== "all") params.jobStatus = status;
-      if (fromDate) params.fromDate = fromDate;
-      if (toDate) params.toDate = toDate;
-
-      const res = await API.get("/tracking/history", { params });
+      const res = await API.get("/tracking/history");
       if (res.data) {
         setHistory(res.data);
       }
@@ -41,10 +27,6 @@ export default function TrackingHistory() {
     fetchHistory();
   }, []);
 
-  const handleFilter = () => {
-    fetchHistory();
-  };
-
   if (loading) {
     return <p className="p-4 text-gray-600">Memuat data tracking...</p>;
   }
@@ -55,70 +37,18 @@ export default function TrackingHistory() {
 
   return (
     <div className="p-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Tracking History</h2>
-        <div className="flex flex-wrap gap-2 items-center">
-          {/* Role filter */}
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
-          >
-            <option value="all">All Roles</option>
-            <option value="driver">Driver</option>
-            <option value="guide">Guide</option>
-          </select>
-
-          {/* Status filter */}
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
-          >
-            <option value="all">All Status</option>
-            <option value="completed">Completed</option>
-            <option value="in progress">In Progress</option>
-            <option value="on schedule">On Schedule</option>
-          </select>
-
-          {/* Date filters */}
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
-          />
-          <span className="text-sm">to</span>
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
-          />
-
-          <button
-            onClick={handleFilter}
-            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-          >
-            Apply
-          </button>
-          <button
-            onClick={() => {
-              setRole("all");
-              setStatus("all");
-              setFromDate("");
-              setToDate("");
-              fetchHistory();
-            }}
-            className="bg-gray-300 text-gray-700 px-3 py-1 rounded hover:bg-gray-400 text-sm"
-          >
-            Reset
-          </button>
-        </div>
+        <button
+          onClick={fetchHistory}
+          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+        >
+          Refresh
+        </button>
       </div>
 
       {history.length === 0 ? (
-        <p className="text-gray-500">No tracking data available.</p>
+        <p className="text-gray-500">Belum ada data tracking tersedia.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border border-gray-200 shadow rounded-lg">
@@ -167,11 +97,9 @@ export default function TrackingHistory() {
                       className={`px-2 py-1 rounded text-xs font-medium ${
                         h.jobId?.status === "completed"
                           ? "bg-green-100 text-green-700"
-                          : h.jobId?.status === "in progress"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : h.jobId?.status === "on schedule"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-700"
+                          : h.jobId?.status === "cancel"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-yellow-100 text-yellow-700"
                       }`}
                     >
                       {h.jobId?.status || "-"}
