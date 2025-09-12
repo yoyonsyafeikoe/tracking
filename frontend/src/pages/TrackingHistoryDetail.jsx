@@ -1,8 +1,15 @@
 // src/pages/TrackingHistoryDetail.jsx
 import { useEffect, useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import API from "../api/api";
-import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  Marker,
+  Popup,
+  useMap,
+} from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 const DEMO_MODE = true; // 🔹 Set false kalau mau pakai GPS asli
@@ -19,6 +26,10 @@ function FlyToMarker({ position, follow }) {
 
 export default function TrackingHistoryDetail() {
   const { sessionId } = useParams();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const destinationId = queryParams.get("destinationId");
+
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -30,15 +41,29 @@ export default function TrackingHistoryDetail() {
   const [maxSpeed, setMaxSpeed] = useState(0);
   const [followMarker, setFollowMarker] = useState(true);
   const [showAllStreets, setShowAllStreets] = useState(false);
+
   const markerRef = useRef(null);
   const intervalRef = useRef(null);
-  const speedData = useRef([]); // 🔹 Simpan semua kecepatan untuk hitung avg & max
+  const speedData = useRef([]);
 
   useEffect(() => {
     const fetchDetail = async () => {
       try {
         const res = await API.get(`/tracking/${sessionId}`);
-        setSession(res.data);
+        
+        let sess = res.data;
+        console.log("📌 Streets di FE - atas:", sess);
+        // Jika ada filter destinationId → hanya ambil points & streets sesuai
+        if (destinationId && sess && sess.points?.length > 0) {
+          sess = {
+            ...sess,
+            points: sess.points.filter(
+              (p) => p.destinationId === destinationId
+            ),
+          };
+        }
+        console.log("📌 Streets di FE - bawah:", sess);
+        setSession(sess);
       } catch (err) {
         console.error("Failed to fetch session detail:", err);
         setError("Gagal memuat detail tracking.");
@@ -47,16 +72,16 @@ export default function TrackingHistoryDetail() {
       }
     };
     fetchDetail();
-  }, [sessionId]);
+  }, [sessionId, destinationId]);
 
   const calculateSpeed = (prev, next) => {
     if (!prev || !next) return 0;
 
     if (DEMO_MODE) {
-      return Math.floor(Math.random() * 40) + 40; // Fake speed 40-80 km/jam
+      return Math.floor(Math.random() * 40) + 40; // Fake 40–80 km/jam
     }
 
-    // Hitung kecepatan real (produksi)
+    // Produksi → hitung berdasarkan jarak dan waktu
     const R = 6371;
     const toRad = (deg) => (deg * Math.PI) / 180;
     const dLat = toRad(next.latitude - prev.latitude);
@@ -69,7 +94,8 @@ export default function TrackingHistoryDetail() {
         Math.sin(dLon / 2) ** 2;
 
     const dKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const deltaTime = (new Date(next.timestamp) - new Date(prev.timestamp)) / 3600000;
+    const deltaTime =
+      (new Date(next.timestamp) - new Date(prev.timestamp)) / 3600000;
 
     return deltaTime > 0 ? Math.round(dKm / deltaTime) : 0;
   };
@@ -102,7 +128,6 @@ export default function TrackingHistoryDetail() {
       const speedNow = calculateSpeed(prev, next);
       setCurrentSpeed(speedNow);
 
-      // Update data untuk avg & max speed
       speedData.current.push(speedNow);
       const total = speedData.current.reduce((a, b) => a + b, 0);
       setAverageSpeed((total / speedData.current.length).toFixed(1));
@@ -124,15 +149,16 @@ export default function TrackingHistoryDetail() {
         Tracking Detail - {session.jobId?.destination || "Unknown"}
       </h2>
 
-      {/* TOP INFO SECTION */}
+      {/* TOP INFO */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        {/* Kiri: Info Job */}
         <div className="bg-gray-50 p-4 rounded-lg shadow">
           <p className="text-sm text-gray-700">
-            <span className="font-semibold">Driver:</span> {session.jobId?.driverId?.username || "-"}
+            <span className="font-semibold">Driver:</span>{" "}
+            {session.jobId?.driverId?.username || "-"}
           </p>
           <p className="text-sm text-gray-700">
-            <span className="font-semibold">Guide:</span> {session.jobId?.guideId?.username || "-"}
+            <span className="font-semibold">Guide:</span>{" "}
+            {session.jobId?.guideId?.username || "-"}
           </p>
           <p className="text-sm text-gray-700">
             <span className="font-semibold">Date:</span>{" "}
@@ -162,17 +188,17 @@ export default function TrackingHistoryDetail() {
           </p>
         </div>
 
-        {/* Kanan: Route Taken */}
+        {/* Route Taken */}
         <div className="bg-white p-4 rounded-lg shadow max-h-48 overflow-hidden">
           <h3 className="font-semibold mb-2 text-gray-800">Route Taken:</h3>
           <div className="grid grid-cols-2 gap-x-8">
-            {(showAllStreets ? session.streets : session.streets.slice(0, 10)).map((s, i) => (
+            {(showAllStreets ? session.streets : session.streets?.slice(0, 10))?.map((s, i) => (
               <p key={i} className="text-sm text-gray-700">
-                • {s.name}
+                • {s?.name || "(no street name)"}
               </p>
             ))}
           </div>
-          {session.streets.length > 10 && (
+          {session.streets?.length > 10 && (
             <button
               onClick={() => setShowAllStreets(!showAllStreets)}
               className="mt-2 text-blue-600 hover:underline text-sm"
@@ -183,7 +209,7 @@ export default function TrackingHistoryDetail() {
         </div>
       </div>
 
-      {/* Replay Controls */}
+      {/* Controls */}
       <div className="flex flex-wrap items-center gap-4 mb-4 bg-white shadow p-3 rounded-lg">
         <button
           onClick={handleReplay}
@@ -217,17 +243,29 @@ export default function TrackingHistoryDetail() {
           <label className="text-sm">Follow marker</label>
         </div>
 
-        {/* Live Speed, Avg Speed, Max Speed */}
         <div className="ml-auto flex gap-6 text-sm font-semibold text-gray-700">
-          <span>Live Speed: <span className="text-blue-600">{currentSpeed} km/hour</span></span>
-          <span>Avg Speed: <span className="text-green-600">{averageSpeed} km/hour</span></span>
-          <span>Max Speed: <span className="text-red-600">{maxSpeed} km/hour</span></span>
+          <span>
+            Live Speed:{" "}
+            <span className="text-blue-600">{currentSpeed} km/h</span>
+          </span>
+          <span>
+            Avg Speed:{" "}
+            <span className="text-green-600">{averageSpeed} km/h</span>
+          </span>
+          <span>
+            Max Speed:{" "}
+            <span className="text-red-600">{maxSpeed} km/h</span>
+          </span>
         </div>
       </div>
 
-      {/* MAP */}
+      {/* Map */}
       <div className="h-96 w-full mt-4 shadow rounded-lg overflow-hidden">
-        <MapContainer center={positions[0]} zoom={15} style={{ height: "100%", width: "100%" }}>
+        <MapContainer
+          center={positions[0]}
+          zoom={15}
+          style={{ height: "100%", width: "100%" }}
+        >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <Polyline positions={positions} color="blue" />
           <Marker position={currentPosition} ref={markerRef}>

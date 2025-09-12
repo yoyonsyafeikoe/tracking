@@ -14,10 +14,11 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.marker.slideto";
 import API from "../api/api";
 
-// DEMO MODE SWITCH
-const DEMO_MODE = true; // 🔹 ubah ke false untuk real GPS
+// === SETTINGS ===
+const DEMO_MODE = true; // 🔹 true untuk simulasi, false di production
+const FETCH_STREET = false;
 
-// ICONS
+// === ICONS ===
 const redIcon = new L.Icon({
   iconUrl:
     "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
@@ -34,7 +35,7 @@ const greenIcon = new L.Icon({
   iconAnchor: [12, 41],
 });
 
-// Haversine (Km)
+// === Haversine (Km) ===
 const haversineKm = (lat1, lon1, lat2, lon2) => {
   const toRad = (d) => (d * Math.PI) / 180;
   const R = 6371;
@@ -45,6 +46,18 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
+
+async function getStreetName(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+    );
+    const data = await res.json();
+    return data.display_name || "Unknown street";
+  } catch {
+    return "Unknown street";
+  }
+}
 
 function RecenterMap({ lat, lng }) {
   const map = useMap();
@@ -61,15 +74,82 @@ export default function MonitoringPage() {
   const [filter, setFilter] = useState("all");
   const [speeds, setSpeeds] = useState({});
   const [maxSpeeds, setMaxSpeeds] = useState({});
+  const [streets, setStreets] = useState({});
 
   const markersRef = useRef({});
-  const lastPointsRef = useRef({}); // { userId: { lat, lng, ts } }
+  const lastPointsRef = useRef({});
 
-  // Parameter filter noise
-  const MIN_DIST_KM = 0.005; // minimal 5 meter
-  const MAX_SPEED_KMH = 180; // buang spike >180 km/h (hanya real GPS)
-  const MIN_TIME_HOURS = 1 / 3600; // minimal 1 detik
+  const MIN_DIST_KM = 0.0005;
+  const MAX_SPEED_KMH = 180;
 
+  // === SOCKET HANDLER ===
+  const onUserLocation = ({
+    userId,
+    latitude,
+    longitude,
+    timestamp,
+    ...rest
+  }) => {
+    // === UPDATE USERS ===
+    console.log("📥 Received userLocation:", userId, latitude, longitude, rest);
+    setUsers((prev) => {
+      const idx = prev.findIndex((u) => u.userId === userId);
+      if (idx !== -1) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], latitude, longitude, timestamp, ...rest };
+        return updated;
+      }
+      return [...prev, { userId, latitude, longitude, timestamp, ...rest }];
+    });
+
+    // === UPDATE PATH ===
+    setPaths((prev) => {
+      const updated = { ...prev };
+      if (!updated[userId]) updated[userId] = [];
+      updated[userId] = [...updated[userId], [latitude, longitude]];
+      return updated;
+    });
+
+    // === PERHITUNGAN SPEED ===
+    setSpeeds((prevSpeeds) => {
+      const now = Number(timestamp) || Date.now();
+      const last = lastPointsRef.current[userId];
+      let speedKmh = 0;
+
+      if (last) {
+        const distKm = haversineKm(last.lat, last.lng, latitude, longitude);
+        let timeH = (now - last.ts) / 3600000;
+        if (timeH <= 0) timeH = 0.0000001;
+
+        if (DEMO_MODE) {
+          speedKmh = Math.floor(Math.random() * 60) + 20;
+        } else {
+          speedKmh = distKm / timeH;
+          if (distKm < MIN_DIST_KM || speedKmh > MAX_SPEED_KMH) {
+            speedKmh = 0;
+          }
+        }
+      }
+
+      lastPointsRef.current[userId] = { lat: latitude, lng: longitude, ts: now };
+
+      setMaxSpeeds((prevMax) => {
+        const currentMax = prevMax[userId] || 0;
+        return { ...prevMax, [userId]: Math.max(currentMax, speedKmh) };
+      });
+
+      return { ...prevSpeeds, [userId]: speedKmh };
+    });
+
+    // === OPSIONAL: street name ===
+    if (FETCH_STREET) {
+      getStreetName(latitude, longitude).then((name) => {
+        setStreets((prev) => ({ ...prev, [userId]: name }));
+      });
+    }
+  };
+
+  // === FETCH ACTIVE USERS SAAT LOAD ===
   useEffect(() => {
     const fetchActive = async () => {
       try {
@@ -96,100 +176,60 @@ export default function MonitoringPage() {
     };
 
     fetchActive();
-
-    // Realtime updates
-    const onUserLocation = ({ userId, latitude, longitude, timestamp, ...rest }) => {
-      setUsers((prev) => {
-        const idx = prev.findIndex((u) => u.userId === userId);
-        if (idx !== -1) {
-          const updated = [...prev];
-          updated[idx] = { ...updated[idx], ...rest, latitude, longitude, timestamp };
-          return updated;
-        }
-        return [...prev, { userId, latitude, longitude, timestamp, ...rest }];
-      });
-
-      setPaths((prev) => {
-        const updated = { ...prev };
-        if (!updated[userId]) updated[userId] = [];
-        updated[userId] = [...updated[userId], [latitude, longitude]];
-        return updated;
-      });
-
-      // 🔹 Hitung speed
-        // 🔹 Hitung speed
-setSpeeds((prevSpeeds) => {
-  let speedKmh = 0;
-  const last = lastPointsRef.current[userId];
-  const now = Number(timestamp) || Date.now();
-
-  if (last) {
-    const distKm = haversineKm(last.lat, last.lng, latitude, longitude);
-    let timeH = (now - last.ts) / 3600000;
-
-    if (timeH <= 0) timeH = 0.0000001;
-
-    if (DEMO_MODE) {
-      // 🔹 Mode demo → pakai random 20–80 km/h
-      speedKmh = Math.floor(Math.random() * 60) + 20;
-    } else {
-      // 🔹 Mode real GPS
-      speedKmh = distKm / timeH;
-      if (distKm < MIN_DIST_KM || speedKmh > MAX_SPEED_KMH) {
-        speedKmh = 0;
-      }
-    }
-  }
-
-  // simpan titik terakhir setelah perhitungan
-  lastPointsRef.current[userId] = { lat: latitude, lng: longitude, ts: now };
-
-  // update max speed
-  setMaxSpeeds((prevMax) => {
-    const currentMax = prevMax[userId] || 0;
-    return { ...prevMax, [userId]: Math.max(currentMax, speedKmh) };
-  });
-
-  return { ...prevSpeeds, [userId]: speedKmh };
-});
-
-
-    };
-
-    const onRemoveUser = ({ userId }) => {
-      setUsers((prev) => prev.filter((u) => u.userId !== userId));
-      setPaths((prev) => {
-        const copy = { ...prev };
-        delete copy[userId];
-        return copy;
-      });
-      setSpeeds((prev) => {
-        const copy = { ...prev };
-        delete copy[userId];
-        return copy;
-      });
-      setMaxSpeeds((prev) => {
-        const copy = { ...prev };
-        delete copy[userId];
-        return copy;
-      });
-      delete lastPointsRef.current[userId];
-    };
-
     socket.on("userLocation", onUserLocation);
-    socket.on("removeUser", onRemoveUser);
+    socket.on("removeUser", ({ userId }) => {
+      setUsers((prev) => prev.filter((u) => u.userId !== userId));
+    });
 
     return () => {
       socket.off("userLocation", onUserLocation);
-      socket.off("removeUser", onRemoveUser);
+      socket.off("removeUser");
     };
   }, []);
 
+  // === DEMO MODE MOVEMENT ===
+  useEffect(() => {
+    if (DEMO_MODE) {
+      const interval = setInterval(() => {
+        users.forEach((u) => {
+          if (u.latitude && u.longitude) {
+            const deltaLat = (Math.random() - 0.5) * 0.010;
+            const deltaLng = (Math.random() - 0.5) * 0.010;
+            const newLat = u.latitude + deltaLat;
+            const newLng = u.longitude + deltaLng;
+
+            onUserLocation({
+              userId: u.userId,
+              latitude: newLat,
+              longitude: newLng,
+              timestamp: Date.now(),
+              ...u,
+            });
+          }
+        });
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [users]);
+
+  // === FIX MARKER UPDATE ===
   useEffect(() => {
     users.forEach((u) => {
       const marker = markersRef.current[u.userId];
-      if (marker && marker.slideTo && u.latitude != null && u.longitude != null) {
-        marker.slideTo([u.latitude, u.longitude], { duration: 1000 });
+      if (marker && u.latitude != null && u.longitude != null) {
+        try {
+          if (typeof marker.slideTo === "function") {
+            marker.slideTo([u.latitude, u.longitude], {
+              duration: 1000,
+              keepAtCenter: false,
+            });
+          } else {
+            marker.setLatLng([u.latitude, u.longitude]);
+          }
+        } catch (err) {
+          console.warn(`⚠️ Marker update failed for ${u.username}:`, err);
+        }
       }
     });
   }, [users]);
@@ -243,8 +283,15 @@ setSpeeds((prevSpeeds) => {
                 <p className="text-sm text-gray-600 capitalize">{u.role}</p>
                 {u.job && (
                   <p className="text-xs text-gray-500">
-                    {u.job.destination} ({new Date(u.job.date).toLocaleDateString()})
+                    {u.job.destination} (
+                    {u.job.date
+                      ? new Date(u.job.date).toLocaleDateString()
+                      : ""}
+                    )
                   </p>
+                )}
+                {FETCH_STREET && streets[u.userId] && (
+                  <p className="text-xs text-blue-500">{streets[u.userId]}</p>
                 )}
               </div>
               <div className="text-right">
@@ -256,7 +303,8 @@ setSpeeds((prevSpeeds) => {
                   🚗 {speeds[u.userId] ? speeds[u.userId].toFixed(1) : 0} km/h
                 </span>
                 <span className="text-xs text-gray-500">
-                  ⬆ Max: {maxSpeeds[u.userId] ? maxSpeeds[u.userId].toFixed(1) : 0} km/h
+                  ⬆ Max:{" "}
+                  {maxSpeeds[u.userId] ? maxSpeeds[u.userId].toFixed(1) : 0} km/h
                 </span>
               </div>
             </div>
@@ -264,9 +312,13 @@ setSpeeds((prevSpeeds) => {
         ))}
       </div>
 
-      {/* Map */}
+      {/* MAP */}
       <div className="w-2/3 md:w-3/4">
-        <MapContainer center={[-2.5, 118]} zoom={5} style={{ height: "100%", width: "100%" }}>
+        <MapContainer
+          center={[-2.5, 118]}
+          zoom={5}
+          style={{ height: "100%", width: "100%" }}
+        >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {focus && <RecenterMap lat={focus.lat} lng={focus.lng} />}
 
@@ -278,7 +330,9 @@ setSpeeds((prevSpeeds) => {
                 position={[u.latitude, u.longitude]}
                 icon={u.role === "driver" ? redIcon : greenIcon}
                 ref={(el) => {
-                  if (el) markersRef.current[u.userId] = el;
+                  if (el && el._icon) {
+                    markersRef.current[u.userId] = el;
+                  }
                 }}
               >
                 <Popup>
@@ -290,7 +344,16 @@ setSpeeds((prevSpeeds) => {
                     <>
                       Destination: {u.job.destination}
                       <br />
-                      Date: {new Date(u.job.date).toLocaleDateString()}
+                      Date:{" "}
+                      {u.job.date
+                        ? new Date(u.job.date).toLocaleDateString()
+                        : ""}
+                    </>
+                  )}
+                  {FETCH_STREET && streets[u.userId] && (
+                    <>
+                      <br />
+                      Street: {streets[u.userId]}
                     </>
                   )}
                   <br />
@@ -299,7 +362,8 @@ setSpeeds((prevSpeeds) => {
                   </strong>
                   <br />
                   <span>
-                    ⬆ Max Speed: {maxSpeeds[u.userId] ? maxSpeeds[u.userId].toFixed(1) : 0} km/h
+                    ⬆ Max Speed:{" "}
+                    {maxSpeeds[u.userId] ? maxSpeeds[u.userId].toFixed(1) : 0} km/h
                   </span>
                 </Popup>
               </Marker>

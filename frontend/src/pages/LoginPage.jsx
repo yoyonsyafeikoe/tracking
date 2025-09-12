@@ -1,13 +1,12 @@
-import { useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { loginUser } from '../features/auth/authSlice';
-import { useNavigate } from 'react-router-dom';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import API from "../api/api"; // axios instance
 
 export default function LoginPage() {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isLoading, error } = useSelector((state) => state.auth || {});
-  const [formData, setFormData] = useState({ username: '', password: '' });
+  const [formData, setFormData] = useState({ username: "", password: "" });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -15,14 +14,31 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const result = await dispatch(loginUser(formData));
-    if (result.meta.requestStatus === 'fulfilled') {
-      const role = result.payload.user.role;
-      const user = result.payload.user;
-      localStorage.setItem('userId', user.id);
-      if (role === 'admin') navigate('/admin');
-      if (role === 'driver') navigate('/driver');
-      if (role === 'guide') navigate('/guide');
+    setIsLoading(true);
+    setError("");
+
+    try {
+      // 🔑 hit endpoint login backend
+      const res = await API.post("/auth/login", formData);
+
+      if (res.data && res.data.user) {
+        const { user, token } = res.data;
+
+        // simpan info login di localStorage
+        localStorage.setItem("userId", user.id);
+        localStorage.setItem("token", token);
+
+        // redirect sesuai role
+        if (user.role === "admin") navigate("/admin");
+        if (user.role === "driver") navigate("/driver");
+        if (user.role === "guide") navigate("/guide");
+      } else {
+        setError("Invalid response from server");
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || "Login failed");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -31,10 +47,14 @@ export default function LoginPage() {
       <div className="bg-white bg-opacity-20 backdrop-blur-md rounded-2xl shadow-xl p-8 w-full max-w-sm">
         <h2 className="text-3xl font-bold text-center text-white mb-6">Sign In</h2>
 
-        {error && <div className="bg-red-100 text-red-600 p-2 rounded mb-4 text-center">{error}</div>}
+        {error && (
+          <div className="bg-red-100 text-red-600 p-2 rounded mb-4 text-center">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="flex flex-col space-y-4">
-          {/* Email */}
+          {/* Username */}
           <div>
             <input
               type="text"
@@ -66,32 +86,14 @@ export default function LoginPage() {
             className="bg-white text-blue-600 font-bold py-3 rounded-md hover:bg-gray-100 transition"
             disabled={isLoading}
           >
-            {isLoading ? 'Logging in...' : 'Login'}
+            {isLoading ? "Logging in..." : "Login"}
           </button>
 
           {/* Register link */}
           <p className="text-white text-center text-sm">
-            Don&apos;t have an account? <span className="underline cursor-pointer">Register</span>
+            Don&apos;t have an account?{" "}
+            <span className="underline cursor-pointer">Register</span>
           </p>
-
-          {/* Divider */}
-          <div className="flex items-center my-2">
-            <hr className="flex-grow border-t border-white" />
-            <span className="text-white mx-2 text-sm">or log in with</span>
-            <hr className="flex-grow border-t border-white" />
-          </div>
-
-          {/* Social Buttons */}
-          <div className="flex space-x-4">
-            <button type="button" className="flex-1 flex items-center justify-center space-x-2 bg-blue-800 text-white py-2 rounded-md hover:bg-blue-900">
-              <i className="fab fa-facebook-f"></i>
-              <span>Facebook</span>
-            </button>
-            <button type="button" className="flex-1 flex items-center justify-center space-x-2 bg-red-600 text-white py-2 rounded-md hover:bg-red-700">
-              <i className="fab fa-google"></i>
-              <span>Google</span>
-            </button>
-          </div>
         </form>
       </div>
     </div>
