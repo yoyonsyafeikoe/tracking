@@ -125,7 +125,7 @@ export default function TrackingHistory() {
                               <p className="text-sm">
                                 <span className="font-semibold">Price:</span>{" "}
                                 {pkg?.price
-                                  ? `$${pkg.price.toLocaleString()}`
+                                  ? `${pkg.price.toLocaleString()}`
                                   : "-"}
                               </p>
                               <p className="text-sm">
@@ -148,14 +148,29 @@ export default function TrackingHistory() {
                                       key={dest._id}
                                       className="p-3 border rounded-lg"
                                     >
-                                      <h5 className="font-medium text-gray-800">
-                                        {dest.place}
-                                      </h5>
+                                      {/* Header destinasi dengan arrived at */}
+                                      <div className="flex justify-between items-center mb-1">
+                                        <h5 className="font-medium text-gray-800">
+                                          {dest.place}
+                                        </h5>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs text-gray-500">
+                                            arrived at 16:40
+                                          </span>
+                                          <span className="text-green-600 text-lg font-bold">
+                                            ✔
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* List activities */}
                                       <ul className="list-disc list-inside text-sm text-gray-600">
                                         {dest.itineraries?.map((it, idx) => (
                                           <li key={idx}>{it.activity}</li>
                                         ))}
                                       </ul>
+
+                                      {/* Tombol View Route */}
                                       <div className="mt-2">
                                         <Link
                                           to={`/tracking/${h._id}?destinationId=${dest._id}`}
