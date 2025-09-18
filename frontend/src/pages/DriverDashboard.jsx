@@ -44,7 +44,6 @@ export default function DriverDashboard() {
 
   const handleStartTracking = async (jobId, destinationId) => {
     try {
-      alert('destinationID :' + destinationId);
       await API.post("/tracking/start", { jobId, destinationId });
 
       if (DEMO_MODE) {
